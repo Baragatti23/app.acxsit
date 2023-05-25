@@ -9,6 +9,7 @@ class Utilisateur extends Model{
     use HasFactory;
     protected $table ="utilisateurs";
     public $timestamps = false;
+    protected $guarded = [];
     public function statu(){
         return $this->hasOne(Statu::class,'reference_statu','reference_statu');
     }

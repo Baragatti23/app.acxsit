@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AuthController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\UtilisateurController;
@@ -12,9 +13,17 @@ use App\Http\Controllers\LicenceController;
 use App\Http\Controllers\LivrerController;
 use App\Http\Controllers\StadeController;
 use App\Http\Controllers\EstadoController;
+use App\Http\Controllers\FormationController;
+
 
 Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
+});
+Route::controller(AuthController::class)->group(function(){
+    Route::post('/signup','register');
+    Route::post('/0auth','login');
+    Route::post('/loged','loged');
+    Route::post('/logout',[AuthController::class,'logout']);
 });
 Route::controller(UtilisateurController::class)->group(function(){
     // echo($_SERVER["REQUEST_URI"])."\n";
@@ -28,6 +37,11 @@ Route::controller(LicenceController::class)->group(function(){
     Route::get('/licences','get');
     Route::get('/licence/{id}','get');
     Route::post('/licences/','post');
+});
+Route::controller(FormationController::class)->group(function(){
+    Route::get('/formations','get');
+    Route::get('/formation/{id}','get');
+    Route::post('/formations/','post');
 });
 Route::controller(LivrerController::class)->group(function(){
     Route::get('/livrers','get');

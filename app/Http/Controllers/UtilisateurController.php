@@ -36,35 +36,6 @@ use PhpParser\Node\Stmt\Else_;
             }
             return $data;
         }
-        public function post(Request $request){
-            // $columns=$this->getTableColumns($this->table);
-            $data = json_decode($request->getContent(),true);
-            // exit;
-            $element=new Utilisateur();
-            $element->{"reference".$this->prefix}=strtoupper(substr($this->table,0,3)).$this->generateID();
-            if(isset($data["name"],$data["lastname"],$data["email"],$data["password"])){
-                $element->{"name".$this->prefix}=$data["name"];
-                $element->{"lastname".$this->prefix}=$data["lastname"];
-                $element->{"email".$this->prefix}=$data["email"];
-                $element->{"password".$this->prefix}=$data["password"];
-                $element->{"created_by".$this->prefix}="UTI0001";
-                $element->{"reference_statu"}=$data["statu"] ?? "STA0001";
-                $element->{"reference_profil"}=$data["profil"] ?? "PRO0001";
-                $element->{"created_at".$this->prefix}=date("Y-m-d H:i:s");
-                $element->{"updated_at".$this->prefix}=date("Y-m-d H:i:s");
-                $element->save();
-                return[
-                    "status"=>200,
-                    "id"=>$element->{"reference".$this->prefix},
-                    "success"=>"Utilisateur enregistré avec succés"
-                ];
-            }else{
-                return[
-                    "status"=>400,
-                    "error"=>"Utilisateur non enregistré"
-                ];
-            }
-        }
         public function del($id){
             $result=Utilisateur::where("reference".$this->prefix,$id)->get();
             if(empty(json_decode($result->toJson()))){
