@@ -23,7 +23,7 @@ Route::controller(AuthController::class)->group(function(){
     Route::post('/signup','register');
     Route::post('/0auth','login');
     Route::post('/loged','loged');
-    Route::post('/logout',[AuthController::class,'logout']);
+    Route::post('/logout',[AuthController::class,'logout'])->middleware('auth:sanctum');
 });
 Route::controller(UtilisateurController::class)->group(function(){
     // echo($_SERVER["REQUEST_URI"])."\n";

@@ -34,12 +34,15 @@ class AuthController extends Controller
             'email'=>$request->email,
             'password'=>Hash::make($request->password)
         ]);
+        json_encode(Auth::user());
+        exit;
+        $foreign=Utilisateur::select("reference_utilisateur")->where("email_utilisateur",Auth::user()->email)->first();
         $utilisateur=Utilisateur::create([
-            'reference'.$prefix=>"UTS00009",
+            'reference'.$prefix=>"UTS".$this->generateID(),
             'name_utilisateur'=>$request->name,
             'email_utilisateur'=>$request->email,
-            'lastname_utilisateur'=>$request->email,
-            'created_by'.$prefix=>"UTI0001",
+            'lastname_utilisateur'=>$request->lastname,
+            'created_by'.$prefix=>$foreign["reference_utilisateur"],
             'reference_statu'=>"STA0001",
             'reference_profil'=>"PRO0001",
             'created_at'.$prefix=>date("Y-m-d H:i:s"),
@@ -75,7 +78,9 @@ class AuthController extends Controller
         ]);
     }
     public function logout(){
-        Auth::logout();
+        Auth::user()->tokens->each(function($token, $key) {
+            $token->delete();
+        });
         return response()->json([
             'status'=>200,
             'message'=>'Utilisateur deconnecté avec succès'
