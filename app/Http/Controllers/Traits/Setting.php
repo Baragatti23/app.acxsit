@@ -2,31 +2,18 @@
 
     namespace App\Http\Controllers\Traits;
     use Illuminate\Support\Facades\DB;
-    // use App\Models\Proforma;
-    // use App\Models\Bordereau;
-    // use App\Models\Fournisseur;
-    // use App\Models\Client;
-    // use App\Models\Calcule;
-    // use App\Models\Connexion;
-    // use App\Models\Equipement;
-    // use App\Models\Licence;
-    // use App\Models\Livrer;
-    // use App\Models\Profil;
-    // use App\Models\Statu;
-    // use App\Models\Utilisateur;
-    // use App\Models\Stade;
-    // use App\Models\Estado;
     use App\Http\Controllers\PDF\ProformaPDF;
     use Exception;
 
 
     trait Setting{
         private $special_tables=["failed_jobs","migrations","password_reset_tokens","personal_access_tokens","users"];
+        private $status_tables=["status","estados","levels","stades"];
         private $termination="s"; //suffix of tables (if the table name finish with 's')
         private $suffix_table=true; //suffix of columns (if the column name finish with '_tablename')
         private $PK_prefix="reference";
         private $operator_list=["=","<>","!=","IN","NOT IN",">","<",">=","<=","LIKE","NOT LIKE"];
-        private $models=["Utilisateur","Client","estado","Calcul","Connexion","Profil","Statu",
+        private $models=["Utilisateur","Client","Estado","Calcul","Connexion","Profil","Statu",
         "Proforma","Licence","Level","Bordereau","Equipement","Equiper","Fournisseur","Stade"];
         public function queryParams(){
             /*=====================================================
@@ -43,7 +30,8 @@
             $params["operatorTo"]=request()->operatorTo ?? ""; // (string) - delimiter ','
             $params["connectorTo"]=request()->connectorTo ?? ""; //  (string) - delimiter ','
             $params["case"]=request()->case ?? true; //  (string) - delimiter ','
-            $params["between"]=request()->between ?? true; //  (string) - delimiter ','
+            $params["betweenStart"]=request()->betweenStart ?? null; //  (string) - delimiter ','
+            $params["betweenEnd"]=request()->betweenEnd ?? null; //  (string) - delimiter ','
             if(isset(request()->count)) $params["count"]=true;
             $params["foreign"]=isset(request()->foreign) || request()->foreign==true ? true:false; // (boolean or empty)
             $params["foreign_recursive"]=isset(request()->foreign_recursive) || request()->foreign_recursive==true ? true:false; // (boolean or empty)
@@ -51,7 +39,6 @@
         }
         public function validateParams($instanceModel){
             $params=$this->queryParams();
-            
             $params["limit"]=$params["limit"]==0? $instanceModel->count():$params["limit"];
             /*=====================================================
             CLEAN AND FORMAT DATA QUERY PARAMS
@@ -186,6 +173,17 @@
                     }
                 }
             }
+            /* ---------------- 'BETWEEN' PARAMS -------------------- */
+            $betweenStartValue=$params["betweenStart"] ?? null;
+            $betweenEndValue=$params["betweenEnd"] ?? null;
+            if($betweenStartValue && $this->check_your_datetime($betweenStartValue)){
+                if(!$betweenEndValue || !$this->check_your_datetime($betweenEndValue)){
+                    $betweenEndValue=explode(" ",$betweenStartValue)[0]." 23:59:59";
+                }
+            }else{
+                $betweenStartValue=null;
+                $betweenEndValue=null;
+            }
             return [
                 "selectArray"=>$selectArray,
                 "linkToArray"=>$linkToArray,
@@ -195,6 +193,8 @@
                 "orderByArray"=>$orderByArray,
                 "orderModeArray"=>$orderModeArray,
                 "limitValue"=>$limitValue,
+                "betweenStartValue"=>$betweenStartValue,
+                "betweenEndValue"=>$betweenEndValue,
                 "offsetValue"=>$offsetValue,
                 "selectArrayForeigns"=>$selectArrayForeigns,
                 "count"=>isset($params["count"]) ? true : false
@@ -202,9 +202,13 @@
             
         }
         public function executeQuery($instanceModel,$params,$id,$foreign=true){
+            // echo json_encode([
+            //     "betweenStart"=>$params["betweenStartValue"],
+            //     "betweenEnd"=>$params["betweenEndValue"]
+            // ]);
+            // exit;
             $data=$instanceModel->with($params["selectArrayForeigns"]);
             $data=$data->select($params["selectArray"]);
-
             foreach ($params["orderByArray"] as $i => $value) {
                 $data=$data->orderBy($params["orderByArray"][$i],$params["orderModeArray"][$i]);
             }
@@ -213,7 +217,6 @@
             if(!empty($id)){
                 $data=$data->where(...$id);
             }
-            
             foreach ($params["linkToArray"] as $i => $value) {
                 if($params["operatorToArray"][$i]=="IN"){
                     if(isset($params["connectorToArray"][$i-1]) && $params["connectorToArray"][$i-1]=="OR"){
@@ -241,85 +244,163 @@
                     }
                 }
             }
+            if($params["betweenStartValue"]){
+                $data=$data->whereBetween("created_at".$this->prefix,[$params["betweenStartValue"],$params["betweenEndValue"]]);
+            }
             $data=json_decode($data->get()->toJSON(),true);
             if(count($data)!=0){
-                if($foreign) $data=$this->getForeignTables($data,$this->table);
-                $data=$this->clean($data,$this->prefix,false,false);
+                if($foreign) $data=$this->getForeignRecords($data,$this->table);
+                $data=$this->cleanPrefix($data,$this->prefix);
             }
             $json=[];
             if(($params["offsetValue"]!=0 && $params["limitValue"]!=$instanceModel::count())
                 || ($params["offsetValue"]==0 && $params["limitValue"]!=$instanceModel::count())){
-                $json["next"]="";
-                $json["prev"]="";
+                // $json["next"]="";
+                // $json["prev"]="";
             }
             if(!$params["count"])
                 return $this->responseJSON(200,$data,$json);
             else
                 return $this->responseJSON(200,null,["count"=>count($data)]);
         }
-        public function getForeignTables($data,$table){
+        private int $control_recursive_getForeignRecords=0;
+        public function getForeignRecords($data,$table){
+            $this->control_recursive_getForeignRecords++;
+            if(!$data || !$table) return false;
             $i=0;
             foreach ($data as $item) {
-                if(!$data){
-                    $data=[];
-                }
+                $foreigns=[];
                 foreach ($item as $key => $value) {
                     if(str_contains($key,"reference_") && str_replace("reference_",'',$key)."s"!=$table){
                         $model=$this->__getModel__(str_replace("reference_",'',$key)."s");
                         if($model){
+                            $clave=strtolower(str_replace("reference_",'',$key));
+                            unset($data[$i][$key]);
                             if($value && $value!=""){
                                 $foreign=json_decode($model::where($key,$value)->get()->toJson(),true);
-                                $data[$i][strtolower(str_replace("reference_",'',$key))]=isset($foreign[0])?$foreign[0]:[];
-                                unset($data[$i][$key]);
+                                if(count($foreign)==1){
+                                    if($this->control_recursive_getForeignRecords<=2) $foreign=$this->getForeignRecords([$foreign[0]],$clave."s");
+                                    $foreigns[]=["key"=>$clave,"content"=>$foreign[0]];
+                                }else{
+                                    $foreigns[]=["key"=>$key,"content"=>$value];
+                                }
                             }else{
-                                $data[$i][strtolower(str_replace("reference_",'',$key))]=[];
+                                $foreigns[]=["key"=>$key,"content"=>null];
                             }
                         }
                     }
+                }
+                foreach ($foreigns as $elem) {
+                    $data[$i][$elem["key"]]=$elem["content"];
                 }
                 $i++;
             }
             return $data;
         }
-        public function clean($items,$prefix,$foreign=true,$recursive_foreign=false){
-            // $items: data (register of table DB)
+        public function cleanPrefix(array $items,$prefix,$exclude_columns=true){
+            // $items: data (register of table DB): associate array
             // $prefix: prefix de la table (_table) a supprimer
             // $foreign: get data to foreign_keys tables
             // $recursive_foreign: get recursvie data to foreign_keys tables
-            $exclude_columns=$this->getExcludedColumns($items[0],$prefix);
-            for($i=0;$i<count($items);$i++){
-                $item=$items[$i];
-                if($foreign) $item=$this->excludeColumns($item,$exclude_columns);
-                $items[$i]=$this->cleanPrefixForeign($item,$prefix,true,$recursive_foreign);
+            if(count($items)>0){
+                $exclude_columns=$this->getExcludedColumns($items[0],$prefix);
+                for($i=0;$i<count($items);$i++){
+                    $item=$items[$i];
+                    if($exclude_columns){
+                        $excluded=["id"];
+                        if(isset($this->excluded_columns) && is_array($this->excluded_columns)) $excluded=[...$excluded,...$this->excluded_columns];
+                        $item=$this->excludeColumns($item,$excluded);
+                    }
+                    foreach ($item as $col => $value) {
+                        if(in_array(ucwords(strtolower($col)),$this->models)){
+                            unset($items[$i][$col]);
+                            $clave=$col;
+                            if(in_array($col."s",$this->status_tables)){
+                                $clave='status';
+                            }
+                            if(is_array($value)){
+                                $items[$i][$clave]=$this->cleanPrefix([$value],"_".$col)[0];
+                            }else{
+                                $items[$i][$clave]=$value;
+                            }
+                        }else{
+                            if(str_contains($col,$prefix)){
+                                $items[$i][str_replace($prefix,"",$col)]=$value;
+                                unset($items[$i][$col]);
+                            }
+                        }
+                    }
+                    // $items[$i]=$this->cleanPrefixForeign($item,$prefix);
+                }
             }
             return $items;
         }
-        public function cleanPrefixForeign($data,$prefix,$foreign=false,$recursive_foreign=false){
-            foreach ($data as $column => $value) {
-                $col=$column;
-                unset($data[$column]);
-                if(str_contains($column,$prefix)){
-                    $col=explode($prefix,$column)[0];
-                    $data[$col]=$value;
-                }else{
-                    $data[$col]=$value;
-                }
-                if(is_array($data[$col])){
-                    $keys=array_keys($data[$col]);
-                    if(isset($keys[0]) && !is_numeric($keys[0])){
-                        if($foreign) $data[$col]=$this->excludeColumns($data[$col],$this->getExcludedColumns($data[$col],"_".$col));
-                        $data[$col]=$this->cleanPrefixForeign($data[$col],"_".$col,$foreign);
-                    }else{
-                        $j=0;
-                        foreach ($data[$col] as $one) {
-                            if($foreign) $data[$col][$j]=$this->excludeColumns($one,$this->getExcludedColumns($one,"_".substr($col,0,-1)));
-                            $data[$col][$j]=$this->cleanPrefixForeign($one,"_".substr($col,0,-1),$foreign,$recursive_foreign);
-                            $j++;
-                        }
-                    }
+        // public function cleanPrefixForeign($data,$prefix,$foreign=false,$recursive_foreign=false){
+        //     foreach ($data as $column => $value) {
+        //         $col=$column;
+        //         if(str_contains($column,$prefix)){
+        //             $col=explode($prefix,$column)[0];
+        //             $data[$col]=$value;
+        //             unset($data[$column]);
+        //         }
+        //         if(is_array($data[$col])){
+        //             $keys=array_keys($data[$col]);
+        //             $value=$this->getForeignTables([$value],$col."s")[0];
+        //             // if(count($keys)>0 && !is_numeric($keys[0])){
+        //             //     if($foreign) $data[$col]=$this->excludeColumns($data[$col],$this->getExcludedColumns($data[$col],"_".$col));
+        //             //     $data[$col]=$this->cleanPrefixForeign($data[$col],"_".$col,$foreign);
+        //             // }else{
+        //             //     $j=0;
+        //             //     foreach ($data[$col] as $one) {
+        //             //         if($foreign) $data[$col][$j]=$this->excludeColumns($one,$this->getExcludedColumns($one,"_".substr($col,0,-1)));
+        //             //         $data[$col][$j]=$this->cleanPrefixForeign($one,"_".substr($col,0,-1),$foreign,$recursive_foreign);
+        //             //         $j++;
+        //             //     }
+        //             // }
+        //         }
+        //     }
+        //     return $data;
+        // }
+        function check_your_datetime($x) {
+            // return (date('Y-m-d H:i:s', strtotime($x)) == $x);
+            $part_date=count(explode(" ",$x))>0?explode(" ",$x)[0]:null;
+            $part_time=count(explode(" ",$x))>1?explode(" ",$x)[1]:null;
+            if($part_date){
+                $date=date('Y-m-d H:i:s', strtotime($x));
+                $stringdate=[
+                    "year"=>explode("-",$part_date)[0],
+                    "month"=>explode("-",$part_date)[1],
+                    "day"=>explode("-",$part_date)[2]
+                ];
+                $date=[
+                    "year"=>explode("-",explode(" ",$date)[0])[0],
+                    "month"=>explode("-",explode(" ",$date)[0])[1],
+                    "day"=>explode("-",explode(" ",$date)[0])[2]
+                ];
+                if($date["year"]===$stringdate["year"] && 
+                    $date["month"]===substr("0".$stringdate["month"],-2) &&
+                    $date["day"]===substr("0".$stringdate["day"],-2)
+                ){
+                    if($part_time){
+                        $date=date('Y-m-d H:i:s', strtotime($x));
+                        $stringdate=[
+                            "hour"=>explode(":",$part_time)[0],
+                            "min"=>explode(":",$part_time)[1],
+                            "sec"=>explode(":",$part_time)[2]
+                        ];
+                        $date=[
+                            "hour"=>explode(":",explode(" ",$date)[1])[0],
+                            "min"=>explode(":",explode(" ",$date)[1])[1],
+                            "sec"=>explode(":",explode(" ",$date)[1])[2]
+                        ];
+                        if($date["hour"]===$stringdate["hour"] && 
+                            $date["min"]===substr("0".$stringdate["min"],-2) &&
+                            $date["sec"]===substr("0".$stringdate["sec"],-2)
+                        ){ return true; }
+                    }else{ return true; }
                 }
             }
-            return $data;
+            return false;
         }
         public function excludeColumns($data,$columns){
             foreach ($data as $column => $value) {
@@ -407,7 +488,7 @@
                 $json["data"]=[];
                 if($data!=null){
                     $json["data"]=json_decode(json_encode($data));
-                    $json["total"]=count($data);
+                    $json["total_results"]=count($data);
                 }
             }
             foreach ($others as $key => $value) {
@@ -448,7 +529,7 @@
                   $digit=rand(0, 9);
                   $newMask.=$digit;
                }else{
-                  $random=rand(0, count($alphabet));
+                  $random=rand(0, count($alphabet)-1);
                   $newMask.=strtoupper($alphabet[$random]);
                }
             }
@@ -478,7 +559,6 @@
             $pdf_proforma["warranty"]=$proforma['garantie'] . " mois";
             $pdf_proforma["modality"]="100% à la livraison";
             $pdf_proforma["versement"]="chèque/virement";
-
             $data=[];
             foreach ($calcules as $item) {
                 $data[]=[
@@ -542,6 +622,8 @@
         
             if (!is_numeric($number)) {
                 return false;
+            }else{
+                $number=intval($number);
             }
         
             if (($number >= 0 && (int)$number < 0) || (int)$number < 0 - PHP_INT_MAX) {
@@ -610,7 +692,6 @@
             }
             return $this->clearData($result);
         }
-        
     }
 
 ?>

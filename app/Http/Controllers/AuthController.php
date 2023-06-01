@@ -22,6 +22,10 @@ class AuthController extends Controller
             'lastname'=>'required|string|max:255',
             'email'=>'required|string|max:255|unique:users',
             'password'=>'required|string|min:8',
+            'name'=>'required|string|min:3',
+            'lastname'=>'required|string|min:3',
+            'email'=>'required|string|min:3',
+            'profil'=>'string|min:3',
         ]);
         if($validator->fails()){
             return response()->json([
@@ -34,17 +38,17 @@ class AuthController extends Controller
             'email'=>$request->email,
             'password'=>Hash::make($request->password)
         ]);
-        json_encode(Auth::user());
-        exit;
-        $foreign=Utilisateur::select("reference_utilisateur")->where("email_utilisateur",Auth::user()->email)->first();
+        // json_encode(Auth::user());
+        // exit;
+        // $foreign=Utilisateur::select("reference_utilisateur")->where("email_utilisateur",Auth::user()->email)->first();
         $utilisateur=Utilisateur::create([
             'reference'.$prefix=>"UTS".$this->generateID(),
             'name_utilisateur'=>$request->name,
             'email_utilisateur'=>$request->email,
             'lastname_utilisateur'=>$request->lastname,
-            'created_by'.$prefix=>$foreign["reference_utilisateur"],
+            'reference_profil'=>$request->profil ?? "PRO0001",
+            'created_by'.$prefix=>"UTS00009",
             'reference_statu'=>"STA0001",
-            'reference_profil'=>"PRO0001",
             'created_at'.$prefix=>date("Y-m-d H:i:s"),
             'updated_at'.$prefix=>date("Y-m-d H:i:s")
         ]);

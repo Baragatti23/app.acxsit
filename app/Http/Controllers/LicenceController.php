@@ -8,6 +8,7 @@
     use App\Models\Proforma;
     use App\Models\Bordereau;
     use App\Models\Client;
+use App\Models\Equipement;
 
     class LicenceController extends Controller{
 
@@ -29,6 +30,10 @@
             if($data["status"]==200 && isset($data["data"])){
                 $data["data"]=$this->getClient($data["data"]);
                 $data["data"]=$this->countMonthsCostumed($data["data"]);
+                $data["total"]=Licence::count();
+                $data["total_products"]=Licence::count()+Equipement::count();
+                $data["total_licenses"]=Licence::count();
+                $data["total_equipements"]=Equipement::count();
             }
             return $data;
         }
@@ -37,13 +42,10 @@
             $data = json_decode($request->getContent(),true);
             $element=new Licence();
             $element->{"reference".$this->prefix}=strtoupper(substr($this->table,0,3)).$this->generateID();
-            if(isset($data["bordereau"],$data["equipement"],$data["mois"])){
-                $element->{"renouvelle_licence"}=0;
-                $element->{"reference_bordereau"}=$data["bordereau"];
-                $element->{"reference_equipement"}=$data["equipement"];
+            if(isset($data["libelle"],$data["mois"])){
                 $element->{"mois".$this->prefix}=$data["mois"];
+                $element->{"designation".$this->prefix}=$data["libelle"];
                 $element->{"reference_utilisateur"}="UTI0001";
-                $element->{"reference_level"}="LEV0001";
                 $element->{"created_at".$this->prefix}=date("Y-m-d H:i:s");
                 $element->{"updated_at".$this->prefix}=date("Y-m-d H:i:s");
                 $element->save();

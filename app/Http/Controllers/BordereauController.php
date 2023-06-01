@@ -29,64 +29,141 @@ use App\Models\Licence;
             }
             $data=$this->executeQuery(new Bordereau(),$params,$id);
             if($data["status"]==200 && isset($data["data"])){
-                $data["data"]=$this->getClient(json_decode(json_encode($data["data"]),true));
+                $data["data"]=$this->setCountLivrers(json_decode(json_encode($data["data"]),true));
+                if($params["betweenStartValue"]){
+                    $data=[...$data,...[
+                        "total"=>Bordereau::whereBetween("created_at".$this->prefix,[$params["betweenStartValue"],$params["betweenEndValue"]])
+                        ->count(),
+                        "pending"=>Bordereau::where("reference_estado","EST0001")
+                        ->whereBetween("created_at".$this->prefix,[$params["betweenStartValue"],$params["betweenEndValue"]])
+                        ->count(),
+                        "delivered"=>Bordereau::where("reference_estado","EST0002")
+                        ->whereBetween("created_at".$this->prefix,[$params["betweenStartValue"],$params["betweenEndValue"]])
+                        ->count(),
+                        "rejected"=>Bordereau::where("reference_estado","EST0003")
+                        ->whereBetween("created_at".$this->prefix,[$params["betweenStartValue"],$params["betweenEndValue"]])
+                        ->count()
+                    ]];
+                }else{
+                    $data=[...$data,...[
+                        "total"=>Bordereau::count(),
+                        "pending"=>Bordereau::where("reference_estado","EST0001")->count(),
+                        "delivered"=>Bordereau::where("reference_estado","EST0002")->count(),
+                        "rejected"=>Bordereau::where("reference_estado","EST0003")->count()
+                    ]];
+                }
             }
             return $data;
         }
+        public function stats(){
+            return response()->json([
+                "status"=>200,
+                "data"=>[
+                    "total"=>Bordereau::count(),
+                    "pending"=>Bordereau::where("reference_estado","EST0001")->count(),
+                    "delivered"=>Bordereau::where("reference_estado","EST0002")->count(),
+                    "rejected"=>Bordereau::where("reference_estado","EST0003")->count()
+                ]
+            ],200);
+        }
+        public function get_status($id){
+            $bordereau=Bordereau::where("reference_bordereau",$id)->first();
+            $count=0;
+            if($bordereau) $count=Livrer::where("reference_bordereau",$bordereau["reference_bordereau"])->count();
+            if($count==0){
+                $data=Estado::where("reference_estado","!=","EST0002")
+                ->where("reference_estado","!=",$bordereau["reference_estado"])->get();
+            }else{
+                $data=Estado::where("reference_estado","!=",$bordereau["reference_estado"])->get();
+            }
+            $data=$this->cleanPrefix(json_decode(json_encode($data),true),"_estado");
+            return response()->json([
+                "status"=>200,
+                "data"=>$data
+            ],200);
+        }
+        public function put($id,Request $request){
+            $data = json_decode($request->getContent(),true);
+            // echo json_encode($data);
+            // exit;
+            if(isset($id)){
+                $success=false;
+                $count=Bordereau::where("reference_bordereau",$id)->count();
+                if($count>0){
+                    if(isset($data["nom_livreur"])){
+                        Bordereau::where("reference_bordereau",$id)->update(["nom_livreur".$this->prefix=>$data["nom_livreur"]]);
+                        $success=true;
+                    }
+                    if(isset($data["contact_livreur"])){
+                        Bordereau::where("reference_bordereau",$id)->update(["contact_livreur".$this->prefix=>$data["contact_livreur"]]);
+                        $success=true;
+                    }
+                    if(isset($data["nom_recepteur"])){
+                        Bordereau::where("reference_bordereau",$id)->update(["nom_recepteur".$this->prefix=>$data["nom_recepteur"]]);
+                        $success=true;
+                    }
+                    if(isset($data["contact_recepteur"])){
+                        Bordereau::where("reference_bordereau",$id)->update(["contact_recepteur".$this->prefix=>$data["contact_recepteur"]]);
+                        $success=true;
+                    }
+                    if(isset($data["status"]) || isset($data["estado"])){
+                        $count=Estado::where("reference_estado",$data["status"] ?? $data["estado"])->count();
+                        if($count>0){
+                            Bordereau::where("reference_bordereau",$id)->update(["reference_estado"=>$data["status"] ?? $data["estado"]]);
+                            $success=true;
+                        }
+                    }
+                    if($success){
+                        Bordereau::where("reference_bordereau",$id)->update(["updated_at".$this->prefix=>date("Y-m-d H:i:s")]);
+                        return[
+                            "status"=>200,
+                            "id"=>$id,
+                            "success"=>"Bordereau modifié avec succés"
+                        ];
+                    }
+                }
+            }
+            return[
+                "status"=>400,
+                "error"=>"Modification non réussi"
+            ];
+        }
         public function post(Request $request){
             $data = json_decode($request->getContent(),true);
+            $alphabet=["A","B","C","D","E","F","G","H","I","J","K","L"];
+            $start=date("Y:m:1 00:00:00");
+            $end=date("Y:m:j 23:59:59");
+            $total=Bordereau::whereBetween("created_at".$this->prefix,[$start,$end])->count();
+            $last=Bordereau::whereBetween("created_at".$this->prefix,[$start,$end])->orderBy("created_at".$this->prefix,"DESC")->first();
+            if(!empty($last)){
+                $last_code=explode("-",$last["reference".$this->prefix]);
+                if(count($last_code)>1){
+                    $last_code=intval($last_code[1]);
+                    $total=$last_code;
+                }
+            }
+            do{
+                $total=$total+1;
+                $code=$alphabet[intval(date("m")-1)].substr("0".substr(date("Y"),-2),-3)."-".substr("00".$total,-3);
+                $count=Proforma::where("reference_proforma",$code)->count();
+            }while($count!=0);
             $element=new Bordereau();
             $element->{"reference".$this->prefix}=strtoupper(substr($this->table,0,3)).$this->generateID();
-            if(isset($data["proforma"],$data["noms_livreur"],$data["contact_livreur"],$data["items"])){
+            if(isset($data["proforma"])){
                 $element->{"reference_proforma"}=$data["proforma"];
-                $element->{"nom_livreur".$this->prefix}=$data["noms_livreur"];
-                $element->{"contact_livreur".$this->prefix}=$data["contact_livreur"];
-                $element->{"nom_recepteur".$this->prefix}=$data["noms_recepteur"] ?? "";
-                $element->{"contact_recepteur".$this->prefix}=$data["contact_recepteur"] ?? "";
+                if(isset($data["nom_livreur"])) $element->{"nom_livreur".$this->prefix}=$data["nom_livreur"];
+                if(isset($data["contact_livreur"])) $element->{"contact_livreur".$this->prefix}=$data["contact_livreur"];
+                if(isset($data["nom_recepteur"])) $element->{"nom_recepteur".$this->prefix}=$data["nom_recepteur"] ?? "";
+                if(isset($data["contact_recepteur"])) $element->{"contact_recepteur".$this->prefix}=$data["contact_recepteur"] ?? "";
                 $element->{"reference_estado"}="EST0001";
                 $element->{"reference_utilisateur"}="UTI0001";
                 $element->{"created_at".$this->prefix}=date("Y-m-d H:i:s");
                 $element->{"updated_at".$this->prefix}=date("Y-m-d H:i:s");
                 $element->save();
                 if($element){
-                    foreach($data["items"] as $item){
-                        $livrer=new Livrer();
-                        $prefix="_livrer";
-                        $inserteds=[];
-                        if(isset($item["qty"],$item["equipement"])){
-                            $livrer->{"reference_equipement"}=$item["equipement"];
-                            $livrer->{"reference_bordereau"}=$element->{"reference".$this->prefix};
-                            $livrer->{"unites".$prefix}=$item["qty"];
-                            $livrer->{"reference_utilisateur"}="UTI0001";
-                            $livrer->{"created_at".$prefix}=date("Y-m-d H:i:s");
-                            $livrer->{"updated_at".$prefix}=date("Y-m-d H:i:s");
-                            $livrer->save();
-                            if($livrer) $inserteds[]=true;
-                        }
-                    }
-                    if(count($inserteds)==count($data["items"])){
-                        return[
-                            "status"=>200,
-                            "id"=>$element->{"reference".$this->prefix},
-                            "success"=>"Bordereau enregistré avec succés"
-                        ];
-                    }elseif(count($inserteds)>0 && count($inserteds)<count($data["items"])){
-                        return[
-                            "status"=>200,
-                            "id"=>$element->{"reference".$this->prefix},
-                            "success"=>"Toute les equipements n'ont pas été inserés"
-                        ];
-                    }elseif(count($inserteds)==0 && count($data["items"])>0){
-                        return[
-                            "status"=>200,
-                            "id"=>$element->{"reference".$this->prefix},
-                            "success"=>"Aucun equipement n'a pas été inseré"
-                        ];
-                    }
-                }else{
                     return[
-                        "status"=>400,
-                        "error"=>"proforma non enregistré"
+                        "status"=>200,
+                        "success"=>"proforma enregistré avec succés"
                     ];
                 }
             }else{
@@ -145,23 +222,14 @@ use App\Models\Licence;
         public function getPDF(){
 
         }
-        public function getClient($users){
+        public function setCountLivrers(array $bordereaux){
             $i=0;
-            foreach ($users as $item) {
-                $users[$i]["client"]=[];
-                $proformas=json_decode(Proforma::where("reference_proforma",$item["proforma"]["reference"] ?? $item["reference_proforma"])
-                ->get()->toJSON(),true);
-                if(count($proformas)>0){
-                    $proforma=$proformas[0];
-                    $clients=json_decode(Client::where("reference_client",$proforma["reference_client"])
-                    ->get()->toJSON(),true);
-                    if(isset($clients[0])){
-                        $users[$i]["client"]=$this->clean($clients,"_client")[0];
-                    }
-                }
+            foreach ($bordereaux as $item) {
+                $bordereaux[$i]["total_items"]=Livrer::where("reference_bordereau",$item["reference"])
+                ->count();
                 $i++;
             }
-            return $users;
+            return $bordereaux;
         }
     }
 ?>

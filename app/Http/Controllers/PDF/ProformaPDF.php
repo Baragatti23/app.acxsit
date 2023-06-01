@@ -143,7 +143,6 @@
             $page=1;
              foreach($data as $row){
                  $text=[$row["designation"],$row["unity"],$row["quantity"],$row["total_ht"],$row["tva"],$row["total_ttc"]];
- 
                  if($i%2==0) $this->SetFillColor(252);
                  else $this->SetFillColor(255);
                  for($l=0;$l<count($w);$l++){

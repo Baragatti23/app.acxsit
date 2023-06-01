@@ -54,6 +54,7 @@
                 $element->{"unites".$this->prefix}=$data["unites"];
                 $element->{"marge_percent".$this->prefix}=$data["marge"];
                 $element->{"currency".$this->prefix}=$data["currency"];
+                $element->{"reference_type"}=$data["type"];
                 $element->{"reference_utilisateur"}="UTI0001";
                 $element->{"created_at".$this->prefix}=date("Y-m-d H:i:s");
                 $element->{"updated_at".$this->prefix}=date("Y-m-d H:i:s");

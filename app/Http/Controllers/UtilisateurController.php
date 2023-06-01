@@ -8,6 +8,8 @@
     use App\Models\Bordereau;
 use App\Models\Equipement;
 use App\Models\Licence;
+use App\Models\Statu;
+use App\Models\User;
 use PhpParser\Node\Stmt\Else_;
 
     class UtilisateurController extends Controller{
@@ -33,19 +35,21 @@ use PhpParser\Node\Stmt\Else_;
                 $data["data"]=$this->countBordereaus(json_decode(json_encode($data["data"]),true));
                 $data["data"]=$this->countLicences(json_decode(json_encode($data["data"]),true));
                 $data["data"]=$this->countEquipements(json_decode(json_encode($data["data"]),true));
+                $data["total"]=Utilisateur::count();
             }
             return $data;
         }
         public function del($id){
-            $result=Utilisateur::where("reference".$this->prefix,$id)->get();
-            if(empty(json_decode($result->toJson()))){
+            $user=Utilisateur::where("reference".$this->prefix,$id)->first();
+            if(empty(json_decode($user->toJson()))){
                 return [
                     "status"=>400,
                     "success"=>"Utilisateur non trouvé",
                     "id"=>$id
                 ];
             }else{
-                if(Utilisateur::where("reference".$this->prefix,$id)->delete()){
+                if(User::where("email",$user["email".$this->prefix])->delete() &&
+                    Utilisateur::where("reference".$this->prefix,$id)->delete()){
                     return [
                         "status"=>200,
                         "success"=>"Utilisateur supprimer avec succès",
@@ -59,6 +63,48 @@ use PhpParser\Node\Stmt\Else_;
                     ];
                 }
             }
+        }
+        public function put($id,Request $request){
+            $data = json_decode($request->getContent(),true);
+            // echo json_encode($data);
+            // exit;
+            if(isset($id)){
+                $success=false;
+                $count=Utilisateur::where("reference".$this->prefix,$id)->count();
+                if($count>0){
+                    if(isset($data["name"])){
+                        Utilisateur::where("reference".$this->prefix,$id)->update(["name".$this->prefix=>$data["name"]]);
+                        $success=true;
+                    }
+                    if(isset($data["lastname"])){
+                        Utilisateur::where("reference".$this->prefix,$id)->update(["lastname".$this->prefix=>$data["lastname"]]);
+                        $success=true;
+                    }
+                    if(isset($data["email"])){
+                        Utilisateur::where("reference".$this->prefix,$id)->update(["email".$this->prefix=>$data["email"]]);
+                        $success=true;
+                    }
+                    if(isset($data["status"])){
+                        $count=Statu::where("reference_statu",$data["status"])->count();
+                        if($count>0){
+                            Utilisateur::where("reference".$this->prefix,$id)->update(["reference_statu"=>$data["status"]]);
+                            $success=true;
+                        }
+                    }
+                    if($success){
+                        Utilisateur::where("reference".$this->prefix,$id)->update(["updated_at".$this->prefix=>date("Y-m-d H:i:s")]);
+                        return[
+                            "status"=>200,
+                            "id"=>$id,
+                            "success"=>"Utilisateur modifié avec succés"
+                        ];
+                    }
+                }
+            }
+            return[
+                "status"=>400,
+                "error"=>"Modification non réussi"
+            ];
         }
         public function countProformas($users){
             $i=0;
