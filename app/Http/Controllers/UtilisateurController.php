@@ -25,7 +25,7 @@ use PhpParser\Node\Stmt\Else_;
         // METHODS =================================
         public function get($id=null){
             $id=$id?["reference".$this->prefix,$id]:[];
-            $params=$this->validateParams(new Utilisateur(),$id);
+            $params=$this->validateParams();
             if(isset($params["status"]) && $params["status"]=400){
                 return $params;
             }
@@ -36,6 +36,7 @@ use PhpParser\Node\Stmt\Else_;
                 $data["data"]=$this->countLicences(json_decode(json_encode($data["data"]),true));
                 $data["data"]=$this->countEquipements(json_decode(json_encode($data["data"]),true));
                 $data["total"]=Utilisateur::count();
+                $data["data"]=$this->setPK(json_decode(json_encode($data["data"]),true),["reference"]);
             }
             return $data;
         }
@@ -50,6 +51,7 @@ use PhpParser\Node\Stmt\Else_;
             }else{
                 if(User::where("email",$user["email".$this->prefix])->delete() &&
                     Utilisateur::where("reference".$this->prefix,$id)->delete()){
+                    $this->insertActivity("DELETE",$id);
                     return [
                         "status"=>200,
                         "success"=>"Utilisateur supprimer avec succès",
@@ -93,6 +95,7 @@ use PhpParser\Node\Stmt\Else_;
                     }
                     if($success){
                         Utilisateur::where("reference".$this->prefix,$id)->update(["updated_at".$this->prefix=>date("Y-m-d H:i:s")]);
+                        $this->insertActivity("UPDATE",$id);
                         return[
                             "status"=>200,
                             "id"=>$id,

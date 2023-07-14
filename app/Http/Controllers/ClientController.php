@@ -19,7 +19,7 @@ use Illuminate\Http\Request;
         // METHODS =================================
         public function get($id=null){
             $id=$id?["reference".$this->prefix,$id]:[];
-            $params=$this->validateParams(new Client(),$id);
+            $params=$this->validateParams();
             if(isset($params["status"]) && $params["status"]=400){
                 return $params;
             }
@@ -27,6 +27,7 @@ use Illuminate\Http\Request;
             if($data["status"]==200 && isset($data["data"])){
                 $data["data"]=$this->countAchats(json_decode(json_encode($data["data"]),true));
                 $data["total"]=Client::count();
+                $data["data"]=$this->setPK(json_decode(json_encode($data["data"]),true),["reference"]);
             }
             return $data;
         }
@@ -38,6 +39,7 @@ use Illuminate\Http\Request;
                 if(Client::where("reference".$this->prefix,$id)->delete()) $deleted=true;
             }
             if($deleted){
+                $this->insertActivity("DELETE",$id);
                 return[
                     "status"=>200,
                     "id"=>$id,
@@ -75,6 +77,7 @@ use Illuminate\Http\Request;
                     }
                     if($success){
                         Client::where("reference".$this->prefix,$id)->update(["updated_at".$this->prefix=>date("Y-m-d H:i:s")]);
+                        $this->insertActivity("UPDATE",$id);
                         return[
                             "status"=>200,
                             "id"=>$id,
@@ -98,9 +101,10 @@ use Illuminate\Http\Request;
                 $element->{"telephone".$this->prefix}=$data["telephone"] ?? "";
                 $element->{"email".$this->prefix}=$data["email"];
                 $element->{"address".$this->prefix}=$data["address"] ?? "";
-                $element->{"reference_utilisateur"}="UTI0001";
+                $element->{"reference_utilisateur"}="UTS109083DOM";
                 $element->{"created_at".$this->prefix}=date("Y-m-d H:i:s");
                 $element->{"updated_at".$this->prefix}=date("Y-m-d H:i:s");
+                $this->insertActivity("CREATE",$element->{"reference".$this->prefix});
                 $element->save();
                 return[
                     "status"=>200,

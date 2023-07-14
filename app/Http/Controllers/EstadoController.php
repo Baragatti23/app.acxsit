@@ -21,7 +21,11 @@
             if(isset($params["status"]) && $params["status"]=400){
                 return $params;
             }
-            return $this->executeQuery(new Estado(),$params,$id);
+            if(isset($params["status"]) && $params["status"]=200){
+                $data=$this->executeQuery(new Estado(),$params,$id);
+                $data["data"]=$this->setPK(json_decode(json_encode($data["data"]),true),["reference"]);
+            }
+            return $data;
         }
     }
 ?>

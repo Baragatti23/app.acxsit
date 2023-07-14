@@ -5,10 +5,10 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class Calcule extends Model
+class Vendreequipement extends Model
 {
     use HasFactory;
-    protected $table ="calcules";
+    protected $table ="vendreequipements";
     public $timestamps = false;
     // protected $primaryKey = ['reference_proforma', 'reference_equipement','reference_utilisateur'];
     public function utilisateur(){
@@ -20,6 +20,4 @@ class Calcule extends Model
     public function equipement(){
         return $this->belongsTo(Equipement::class,'reference_equipement','reference_equipement');
     }
-    
-    
 }

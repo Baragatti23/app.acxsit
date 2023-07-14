@@ -1,27 +1,21 @@
 <?php
-
     namespace App\Http\Controllers;
     use App\Http\Controllers\Traits\Setting;
-    use App\Models\Stade;
-
-    class StadeController extends Controller{
-
+    use App\Models\Activite;
+    class ActiviteController extends Controller{
         use Setting;
-
-        // PROPERTIES ==============================
-        private $foreign_columns=["proforma","utilisateur"];
-        private $prefix="_stade";
-        private $table="stades";
-        
+        private $prefix="_activite";
+        private $table="activites";
         // METHODS =================================
         public function get($id=null){
             $id=$id?["reference".$this->prefix,$id]:[];
-            $params=$this->validateParams(new Stade(),$id);
+            $params=$this->validateParams();
             if(isset($params["status"]) && $params["status"]=400){
                 return $params;
             }
-            if(isset($params["status"]) && $params["status"]=200){
-                $data=$this->executeQuery(new Stade(),$params,$id);
+            $data=$this->executeQuery(new Activite(),$params,$id);
+            if($data["status"]==200 && isset($data["data"])){
+                $data["total"]=Activite::count();
                 $data["data"]=$this->setPK(json_decode(json_encode($data["data"]),true),["reference"]);
             }
             return $data;

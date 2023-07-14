@@ -19,7 +19,11 @@ class ProfilController extends Controller{
         if(isset($params["status"]) && $params["status"]=400){
             return $params;
         }
-        return $this->executeQuery(new Profil(),$params,$id);
+        if(isset($params["status"]) && $params["status"]=200){
+            $data=$this->executeQuery(new Profil(),$params,$id);
+            $data["data"]=$this->setPK(json_decode(json_encode($data["data"]),true),["reference"]);
+        }
+        return $data;
     }
     public function to_create_user(){
         $data=Profil::select("reference_profil as reference","libelle_profil as content")->get();

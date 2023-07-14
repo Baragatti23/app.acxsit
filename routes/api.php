@@ -1,14 +1,16 @@
 <?php
 
+use App\Http\Controllers\ActiviteController;
 use App\Http\Controllers\AuthController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\UtilisateurController;
 use App\Http\Controllers\ClientController;
-use App\Http\Controllers\CalculeController;
+use App\Http\Controllers\VendreequipementController;
 use App\Http\Controllers\ProformaController;
 use App\Http\Controllers\BordereauController;
 use App\Http\Controllers\CategorieController;
+use App\Http\Controllers\ConnexionController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EquipementController;
 use App\Http\Controllers\LicenceController;
@@ -17,7 +19,10 @@ use App\Http\Controllers\StadeController;
 use App\Http\Controllers\EstadoController;
 use App\Http\Controllers\FormationController;
 use App\Http\Controllers\FournisseurController;
+use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProfilController;
+use App\Http\Controllers\StagereController;
+use App\Http\Controllers\TolicenceController;
 
 Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
@@ -28,13 +33,7 @@ Route::controller(AuthController::class)->group(function(){
     Route::post('/loged','loged');
     Route::post('/logout',[AuthController::class,'logout'])->middleware('auth:sanctum');
 });
-Route::controller(LicenceController::class)->group(function(){
-    Route::get('/licences','get');
-    Route::get('/licence/{id}','get');
-    Route::post('/licences/','post');
-    Route::delete('/licences/','del');
-    Route::put("/licences/",'put');
-});
+
 Route::controller(LivrerController::class)->group(function(){
     Route::get('/livrers','get');
     Route::get('/livrer/{id}','get');
@@ -47,16 +46,8 @@ Route::controller(StadeController::class)->group(function(){
     Route::get('/stades','get');
     Route::get('/stade/{id}','get');
 });
-Route::controller(CategorieController::class)->group(function(){
-    Route::get('/categories','get');
-    Route::get('/categories/to_product','to_create_products');
-    Route::get('/categorie/{id}','get');
-});
-Route::controller(FournisseurController::class)->group(function(){
-    Route::get('/fournisseurs','get');
-    Route::get('/fournisseurs/to_product','to_create_products');
-    Route::get('/fournisseur/{id}','get');
-});
+
+
 Route::controller(EstadoController::class)->group(function(){
     Route::get('/estados','get');
     Route::get('/estado/{id}','get');
@@ -73,12 +64,66 @@ Route::controller(ProfilController::class)->group(function(){
 Route::controller(DashboardController::class)->group(function(){
     Route::get('/dashboard','get');
 });
-Route::controller(CalculeController::class)->group(function(){
-    Route::get('/calcules','get');
-    Route::get('/calcule/{id_proforma}/{id_product}','get');
-    Route::post('/calcules/','post');
-    Route::delete('/calcules/','del');
-    Route::put('/calcules/{id_proforma}/{id_product}','put');
+Route::controller(TolicenceController::class)->group(function(){
+    Route::get('/equipements/get_licences/{equipement}','get_licences');
+    Route::post('/equipements/delete_licence','delete_licences');
+    Route::post('/tolicences','post');
+});
+Route::controller(ProductController::class)->group(function(){
+    Route::get('/products','stats');
+});
+Route::controller(ActiviteController::class)->group(function(){
+    Route::get('/activites','get');
+});
+Route::controller(ConnexionController::class)->group(function(){
+    Route::get('/connexions','get');
+});
+Route::controller(CategorieController::class)->group(function(){
+    Route::get('/categories','get');
+    Route::get('/categories/to_product','to_create_products');
+    Route::get('/categorie/{id}','get');
+    Route::post('/categories','post');
+    Route::put('/categories/{id}','put');
+    Route::delete('/categories/{id}','del');
+});
+Route::controller(StagereController::class)->group(function(){
+    Route::get('/stageres','get');
+    Route::get('/stagere/{id}','get');
+    Route::post('/stageres','post');
+    Route::put('/stageres/{id}','put');
+    Route::delete('/stageres/{id}','del');
+});
+Route::controller(LicenceController::class)->group(function(){
+    Route::get('/licences/to_equipement/{equipement}','to_equipement');
+    Route::get('/licences','get');
+    Route::get('/licence/{id}','get');
+    Route::post('/licences/','post');
+    Route::delete('/licences/{id}','del');
+    Route::put("/licences/{id}",'put');
+});
+Route::controller(FournisseurController::class)->group(function(){
+    Route::get('/fournisseurs','get');
+    Route::get('/fournisseurs/to_product','to_create_products');
+    Route::get('/fournisseur/{id}','get');
+    Route::delete('/fournisseurs/{id}','del');
+    Route::put('/fournisseurs/{id}','put');
+    Route::post('/fournisseurs','post');
+});
+Route::controller(LivrerController::class)->group(function(){
+    Route::get('/livrers','get');
+    Route::get('/livrer/{id_borderau}/{id_equipement}','get');
+    Route::get('/livrers/{id_borderau}/{id_equipement}','get');
+    Route::delete('/livrer/{id_borderau}/{id_equipement}','delete');
+    Route::put('/livrer/{id_borderau}/{id_equipement}','put');
+    Route::post("/livrers/",'post');
+});
+Route::controller(VendreequipementController::class)->group(function(){
+    Route::get('/vendreequipements','get');
+    Route::get('/vendreequipement/{id_proforma}/{id_product}','get');
+    Route::get('/vendreequipements/{id_proforma}/{id_product}','get');
+    Route::post('/vendreequipements/','post');
+    Route::delete('/vendreequipements/{id_proforma}/{id_product}','del');
+    Route::put('/vendreequipements/{id_proforma}/{id_product}','put');
 });
 Route::controller(EquipementController::class)->group(function(){
     Route::get('/equipements','get');
@@ -128,6 +173,7 @@ Route::controller(BordereauController::class)->group(function(){
     Route::get('/bordereaus/pdf/{id}','getPDF');
     Route::get('/bordereaus/download/{id}','downloadPDF');
     Route::get('/bordereau/{id}','get');
+    Route::get('/bordereaus/{id}','get');
     Route::delete('/bordereaus/{id}','del');
     Route::post('/bordereaus/','post');
     Route::put('/bordereaus/{id}','put');

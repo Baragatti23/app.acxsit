@@ -4,11 +4,11 @@
 
     use App\Http\Controllers\Traits\Setting;
     use App\Models\Bordereau;
-    use App\Models\Calcule;
 use App\Models\Livrer;
 use App\Models\Proforma;
     use App\Models\Stade;
-    use Illuminate\Http\Request;
+use App\Models\Vendreequipement;
+use Illuminate\Http\Request;
 
     class ProformaController extends Controller{
 
@@ -22,13 +22,14 @@ use App\Models\Proforma;
         // METHODS =================================
         public function get($id=null){
             $id=$id?["reference".$this->prefix,$id]:[];
-            $params=$this->validateParams(new Proforma(),$id);
+            $params=$this->validateParams();
             if(isset($params["status"]) && $params["status"]=400){
                 return $params;
             }
             $data=$this->executeQuery(new Proforma(),$params,$id);
             if($data["status"]==200 && isset($data["data"])){
                 $data["data"]=$this->set_ttc_ht_totals(json_decode(json_encode($data["data"]),true));
+                $data["data"]=$this->setPK(json_decode(json_encode($data["data"]),true),["reference"]);
                 if(empty($id)){
                     if($params["betweenStartValue"]){
                         $data=[...$data,...[
@@ -66,10 +67,10 @@ use App\Models\Proforma;
                     }
                 }else{
                     if(!empty($data["data"])){
-                       
-                        $data["data"][0]["calcules"]=$this->cleanPrefix(json_decode(json_encode(Calcule::where(...$id)->get()),true),"_calcule");
+                        // $data["data"][0]["calcules"]=$this->cleanPrefix(json_decode(json_encode(Vendreequipement::where(...$id)->get()),true),"_vendreequipement");
+                        return $data;
                     }else{
-                        $data["data"][0]["calcules"]=[];
+                        // $data["data"][0]["calcules"]=[];
                     }
                 }
             }
@@ -79,17 +80,21 @@ use App\Models\Proforma;
             $list=Proforma::select("reference_proforma as reference","sujet_proforma as content")
             ->where("reference_stade","STA0002")->orWhere("reference_stade","STA0005")->get();
             $data=json_decode(json_encode($list),true);
-            foreach ($data as $key=>$item) {
-                $count=Calcule::where("reference_proforma",$item["reference"])->count();
-                if($count==0){
-                    unset($data[$key]);
-                }else{
-                    $data[$key]["content"]=$item["reference"]." - ".$item["content"];
+            // echo json_encode($data);
+            $array=[];
+            for ($i=0;$i<count($data);$i++) {
+                $item=$data[$i];
+                $count=Vendreequipement::where("reference_proforma",$item["reference"])->count();
+                if($count!==0){
+                    $array[]=[
+                        "reference"=>$item["reference"],
+                        "content"=>$item["reference"]." - ".$item["content"]
+                    ];
                 }
             }
             return response()->json([
                 "status"=>200,
-                "data"=>$data
+                "data"=>$array
             ],200);
         }
         public function get_status($id){
@@ -97,7 +102,7 @@ use App\Models\Proforma;
             $data=Stade::where("reference_stade","!=",$proforma["reference_stade"])
             ->where("reference_stade","!=","STA0005")
             ->where("reference_stade","!=","STA0006");
-            $count=Calcule::where("reference_proforma",$proforma["reference_proforma"])->count();
+            $count=Vendreequipement::where("reference_proforma",$proforma["reference_proforma"])->count();
             if($count==0){
                 $data=$data->where("reference_stade","!=","STA0002");
             }
@@ -111,36 +116,20 @@ use App\Models\Proforma;
         public function post(Request $request){
             // $columns=$this->getTableColumns($this->table);
             $data = json_decode($request->getContent(),true);
-            $alphabet=["A","B","C","D","E","F","G","H","I","J","K","L"];
-            $start=date("Y:m:1 00:00:00");
-            $end=date("Y:m:j 23:59:59");
-            $total=Proforma::whereBetween("created_at".$this->prefix,[$start,$end])->count();
-            $last=Proforma::whereBetween("created_at".$this->prefix,[$start,$end])->orderBy("created_at".$this->prefix,"DESC")->first();
-            if(!empty($last)){
-                $last_code=explode("-",$last["reference".$this->prefix]);
-                if(count($last_code)>1){
-                    $last_code=intval($last_code[1]);
-                    $total=$last_code;
-                }
-            }
-            do{
-                $total=$total+1;
-                $code=$alphabet[intval(date("m")-1)].substr("0".substr(date("Y"),-2),-3)."-".substr("00".$total,-3);
-                $count=Proforma::where("reference".$this->prefix,$code)->count();
-            }while($count!=0);
             $element=new Proforma();
-            $element->{"reference".$this->prefix}=$code;
-            if(isset($data["subject"],$data["client"],$data["validity"])){
-                $element->{"sujet".$this->prefix}=$data["subject"];
-                $element->{"validate".$this->prefix}=$data["validity"];
-                $element->{"garantie".$this->prefix}=$data["warranty"] ?? 0;
+            $element->{"reference".$this->prefix}=$this->generateCode("proformas");
+            if(isset($data["sujet"],$data["reference_client"],$data["validate"])){
+                $element->{"sujet".$this->prefix}=$data["sujet"];
+                $element->{"validate".$this->prefix}=$data["validate"];
+                $element->{"garantie".$this->prefix}=$data["garantie"] ?? 0;
                 $element->{"livraison".$this->prefix}=$data["livraison"] ?? 0;
-                $element->{"modalite".$this->prefix}=$data["modality"] ?? "";
-                $element->{"reference_client"}=$data["client"];
-                $element->{"reference_utilisateur"}="UTI0001";
+                $element->{"modalite".$this->prefix}=$data["modalite"] ?? "";
+                $element->{"reference_client"}=$data["reference_client"];
+                $element->{"reference_utilisateur"}="UTS109083DOM";
                 $element->{"reference_stade"}="STA0001";
                 $element->{"created_at".$this->prefix}=date("Y-m-d H:i:s");
                 $element->{"updated_at".$this->prefix}=date("Y-m-d H:i:s");
+                $this->insertActivity("CREATE",$element->{"reference".$this->prefix});
                 $element->save();
                 return[
                     "status"=>200,
@@ -162,24 +151,24 @@ use App\Models\Proforma;
                 $success=false;
                 $count=Proforma::where("reference".$this->prefix,$id)->count();
                 if($count>0){
-                    if(isset($data["subject"])){
-                        Proforma::where("reference".$this->prefix,$id)->update(["sujet".$this->prefix=>$data["subject"]]);
+                    if(isset($data["sujet"])){
+                        Proforma::where("reference".$this->prefix,$id)->update(["sujet".$this->prefix=>$data["sujet"]]);
                         $success=true;
                     }
-                    if(isset($data["delivery"])){
-                        Proforma::where("reference".$this->prefix,$id)->update(["livraison".$this->prefix=>$data["delivery"]]);
+                    if(isset($data["livraison"])){
+                        Proforma::where("reference".$this->prefix,$id)->update(["livraison".$this->prefix=>$data["livraison"]]);
                         $success=true;
                     }
-                    if(isset($data["warranty"])){
-                        Proforma::where("reference".$this->prefix,$id)->update(["garantie".$this->prefix=>$data["warranty"]]);
+                    if(isset($data["garantie"])){
+                        Proforma::where("reference".$this->prefix,$id)->update(["garantie".$this->prefix=>$data["garantie"]]);
                         $success=true;
                     }
-                    if(isset($data["validity"])){
-                        Proforma::where("reference".$this->prefix,$id)->update(["validate".$this->prefix=>$data["validity"]]);
+                    if(isset($data["validate"])){
+                        Proforma::where("reference".$this->prefix,$id)->update(["validate".$this->prefix=>$data["validate"]]);
                         $success=true;
                     }
-                    if(isset($data["modality"])){
-                        Proforma::where("reference".$this->prefix,$id)->update(["modalite".$this->prefix=>$data["modality"]]);
+                    if(isset($data["modalite"])){
+                        Proforma::where("reference".$this->prefix,$id)->update(["modalite".$this->prefix=>$data["modalite"]]);
                         $success=true;
                     }
                     if(isset($data["status"]) || isset($data["stade"])){
@@ -191,6 +180,7 @@ use App\Models\Proforma;
                     }
                     if($success){
                         Proforma::where("reference".$this->prefix,$id)->update(["updated_at".$this->prefix=>date("Y-m-d H:i:s")]);
+                        $this->insertActivity("UPDATE",$id);
                         return[
                             "status"=>200,
                             "id"=>$id,
@@ -207,11 +197,21 @@ use App\Models\Proforma;
         public function set_ttc_ht_totals($proformas){
             $i=0;
             foreach ($proformas as $item) {
-                $proformas[$i]["total_ht"]=Calcule::where("reference_proforma",$item["reference"])
-                ->sum("montant_total_ht_calcule");
-                $proformas[$i]["total_ttc"]=Calcule::where("reference_proforma",$item["reference"])
-                ->sum("montant_total_ttc_calcule");
-                
+                $ht=0;
+                $ttc=0;
+                $tva=0;
+                $calcules=Vendreequipement::where("reference_proforma",$item["reference"])->get();
+                $proformas[$i]["total_vendreequipements"]=Vendreequipement::where("reference_proforma",$item["reference"])->count();
+                $proformas[$i]["total_bordereaus"]=Bordereau::where("reference_proforma",$item["reference"])->count();
+                $calcules=json_decode(json_encode($calcules),true);
+                foreach ($calcules as $key) {
+                    $ht=$ht+$key["montant_total_ht_vendreequipement"];
+                    $ttc=$ttc+$key["montant_total_ttc_vendreequipement"];
+                    $tva=$tva+$key["tva_vendreequipement"];
+                }          
+                $proformas[$i]["total_ht"]=$ht ;
+                $proformas[$i]["total_ttc"]=$ttc;
+                $proformas[$i]["tva"]=$tva;
                 $i++;
             }
             return $proformas;
@@ -221,7 +221,7 @@ use App\Models\Proforma;
             $proforma=false;
             $bordereau=false;
             if($count>0){
-                Calcule::where("reference_proforma",$id)->delete();
+                Vendreequipement::where("reference_proforma",$id)->delete();
                 $bordereau=Bordereau::select("reference_bordereau")->where("reference_proforma",$id)->get();
                 foreach($bordereau as $item){
                     Livrer::where("reference_bordereau",$item->reference_bordereau)->delete();
@@ -230,6 +230,7 @@ use App\Models\Proforma;
                 $proforma=Proforma::where("reference_proforma",$id)->delete();
             }
             if($proforma){
+                $this->insertActivity("DELETE",$id);
                 return[
                     "status"=>200,
                     "id"=>$id,
@@ -268,9 +269,7 @@ use App\Models\Proforma;
                 $proforma=$this->set_ttc_ht_totals([$proforma])[0];
                 $calcules=$proforma["calcules"];
                 $calcules=$this->getForeignRecords($calcules,'calcules');
-                $calcules=$this->cleanPrefix(json_decode(json_encode($calcules),true),"_calcule");
-                // echo json_encode($calcules);
-                // exit;
+                $calcules=is_array($calcules)?$this->cleanPrefix(json_decode(json_encode($calcules),true),"_vendreequipement"):[];
                 $this->create_proforma_pdf($proforma,$calcules);
             }else{
                 
@@ -280,13 +279,9 @@ use App\Models\Proforma;
             if(Proforma::where("reference_proforma",$id)->count()==1){
                 $proforma=$this->get($id)["data"][0];
                 $proforma=$this->set_ttc_ht_totals([$proforma])[0];
-                $params=$this->validateParams(new Calcule(),$id);
-                $params["orderByArray"][0]="created_at_calcule";
-                $params["linkToArray"][0]="reference_proforma";
-                $params["operatorToArray"][0]="=";
-                $params["compareToArray"][0]=$proforma["reference"];
-                $calcules=$this->executeQuery(new calcule(),$params,"")["data"];
-                $calcules=$this->cleanPrefix(json_decode(json_encode($calcules),true),"_calcule");
+                $calcules=$proforma["calcules"];
+                $calcules=$this->getForeignRecords($calcules,'calcules');
+                $calcules=is_array($calcules)?$this->cleanPrefix(json_decode(json_encode($calcules),true),"_vendreequipement"):[];
                 $this->create_proforma_pdf($proforma,$calcules,true);
             }else{
 

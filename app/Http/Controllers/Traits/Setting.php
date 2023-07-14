@@ -3,7 +3,8 @@
     namespace App\Http\Controllers\Traits;
     use Illuminate\Support\Facades\DB;
     use App\Http\Controllers\PDF\ProformaPDF;
-    use Exception;
+use App\Models\Activite;
+use Exception;
 
 
     trait Setting{
@@ -13,15 +14,19 @@
         private $suffix_table=true; //suffix of columns (if the column name finish with '_tablename')
         private $PK_prefix="reference";
         private $operator_list=["=","<>","!=","IN","NOT IN",">","<",">=","<=","LIKE","NOT LIKE"];
-        private $models=["Utilisateur","Client","Estado","Calcul","Connexion","Profil","Statu",
-        "Proforma","Licence","Level","Bordereau","Equipement","Equiper","Fournisseur","Stade"];
-        public function queryParams(){
+        private $models=[
+            "Utilisateur","Client","Estado","Connexion","Profil","Statu",
+            "Proforma","Licence","Level","Bordereau","Equipement","Equiper",
+            "Fournisseur","Stade","Categorie","Vendreequipement","Vendrelicence",
+            "Activite","Tolicence","Stagere"
+        ];
+        public function queryParams($prefix=""){
             /*=====================================================
             QUERY PARAMS
             =====================================================*/
             $params=[];
-            $params["limit"]=request()->limit ?? 0; // (int)
-            $params["orderBy"]=request()->orderBy ?? "created_at".$this->prefix; // (string) - delimiter ','
+            $params["limit"]=request()->limit ?? "all"; // (int)
+            $params["orderBy"]=request()->orderBy ?? "created_at".($prefix!==""?$this->prefix:$prefix); // (string) - delimiter ','
             $params["orderMode"]=request()->orderMode ?? "desc"; //delimiter ','
             $params["offset"]=request()->offset ?? 0; // (int)
             $params["select"]=request()->select ?? ""; // (string) - delimiter ','
@@ -37,9 +42,11 @@
             $params["foreign_recursive"]=isset(request()->foreign_recursive) || request()->foreign_recursive==true ? true:false; // (boolean or empty)
             return $params;
         }
-        public function validateParams($instanceModel){
-            $params=$this->queryParams();
-            $params["limit"]=$params["limit"]==0? $instanceModel->count():$params["limit"];
+        public function validateParams($max=PHP_INT_MAX,$id="",$prefix=""){
+            $params=$this->queryParams("_".$prefix);
+            $params["limit"]=is_string($params["limit"])
+            && strlen($params["limit"])==strlen("all")
+            && ($params["limit"]==="all" || $params["limit"]==="")? $max:$params["limit"];
             /*=====================================================
             CLEAN AND FORMAT DATA QUERY PARAMS
             =====================================================*/
@@ -49,7 +56,7 @@
                 - $selectArrayForeignsColumns: stock the colmuns selected...
                   ...of foreign tables (array associative: ['table1'=>[columns],'table2'=>[columns]])
             */
-            $columns_foreign_list=$this->getTableColumnsForeign($this->table);
+            $columns_foreign_list=$this->getTableColumnsForeign(isset($this->table)?$this->table:$prefix."s");
             $selectArray=explode(",",$params["select"]);
             $selectArray=array_filter($selectArray);
             $selectArray=array_unique($selectArray);
@@ -62,7 +69,7 @@
                 }
             }
             // filters the columns of 'select' query param
-            $selectArray=$this->validateTableColmuns($selectArray,$this->table);
+            $selectArray=$this->validateTableColmuns($selectArray,isset($this->table)?$this->table:$prefix."s");
             if(empty($selectArray)){
                 return $this->responseJSON(400,others:["msg"=>"Columns Error in select","select"=>$params["select"]]);
             }
@@ -79,8 +86,8 @@
                 - $orderModeArray: string[] - colmuns to apply the order mode  - values: asc | desc
             */
             $orderByArray=$this->arrayFilter(explode(",",$params["orderBy"]));
-            $orderByArray=$this->validateTableColmuns($orderByArray,$this->table);
-            if(!empty($orderByArray) && $orderByArray[0]=="*") $orderByArray=["created_at".$this->prefix];
+            $orderByArray=$this->validateTableColmuns($orderByArray,isset($this->table)?$this->table:$prefix."s");
+            if(!empty($orderByArray) && $orderByArray[0]=="*") $orderByArray=["created_at".isset($this->pefix)?$this->pefix:$prefix."s"];
             else if(empty($orderByArray)){
                 return $this->responseJSON(400,others:["msg"=>"Columns Error in orderBy","orderBy"=>$params["orderBy"]]);
             }
@@ -120,7 +127,7 @@
                 - $connectorToArray: string[] - 
             */
             $linkToArray=$this->arrayFilter(explode(",",$params["linkTo"]),true);
-            $linkToArray=$this->validateTableColmuns($linkToArray,$this->table);
+            $linkToArray=$this->validateTableColmuns($linkToArray,isset($this->table)?$this->table:$prefix."s");
             if(empty($linkToArray)){
                 return $this->responseJSON(400,others:["msg"=>"Columns error in linkTo","linkTo"=>$params["linkTo"]]);
             }elseif($linkToArray[0]=="*"){
@@ -500,12 +507,12 @@
             $array=[];
             $columns_list=$this->getTableColumns($table,true);
             foreach ($columns as $i=>$value) {
-                if(!in_array($value,$columns_list) && !in_array($value.$this->prefix,$columns_list)){
+                if(!in_array($value,$columns_list) && !in_array($value.(isset($this->prefix)?$this->prefix:"_".substr($table,0,-1)),$columns_list)){
                     return [];
                 }else{
                     $index=array_search($value,$columns_list);
                     if(!$index){
-                        $index=array_search($value.$this->prefix,$columns_list);
+                        $index=array_search($value.(isset($this->prefix)?$this->prefix:"_".substr($table,0,-1)),$columns_list);
                     }
                     $array[]=$columns_list[$index];
                 }
@@ -551,8 +558,8 @@
             $pdf_proforma["subject"]=$proforma['sujet'];
             $pdf_proforma["date"]=implode("/",array_reverse(explode("-",explode(" ",$proforma['created_at'])[0])));
             $pdf_proforma["reference"]=$proforma['reference'];
-            $pdf_proforma["total_ht"]=$proforma['total_ht'];
-            $pdf_proforma["total_ttc"]=$proforma['total_ttc'];
+            $pdf_proforma["total_ht"]=$this->format_number($proforma['total_ht']);
+            $pdf_proforma["total_ttc"]=$this->format_number($proforma['total_ttc']);
             $pdf_proforma["total_ttc_letters"]=$this->convertNumberToWords(intval($proforma['total_ttc']));
             $pdf_proforma["delivery"]=$proforma["livraison"]==0?"Immédiatement":($proforma["livraison"]." Jours");
             $pdf_proforma["validity"]=$proforma['validate'] . " mois";
@@ -565,9 +572,9 @@
                     "designation" => $item["equipement"]["designation"],
                     "unity" => "U",
                     "quantity" => $item["unites"],
-                    "total_ht" => intval($item["montant_unitaire_ht"]),
-                    "tva" => intval($item["tva"]),
-                    "total_ttc" => intval($item["montant_total_ttc"]),
+                    "total_ht" => $this->format_number(abs(intval($item["montant_unitaire_ht"]))),
+                    "tva" => $this->format_number(abs(intval($item["tva"]))),
+                    "total_ttc" => $this->format_number(abs(intval($item["montant_total_ttc"]))),
                 ];
             }
             $pdf = new ProformaPDF($pdf_proforma);
@@ -590,7 +597,7 @@
         }
         public function convertNumberToWords($number){
             $words = array(
-                0 => '',
+                0 => 'Zero',
                 1 => 'un',
                 2 => 'deux',
                 3 => 'trois',
@@ -635,7 +642,7 @@
             }
         
             if ($number < 21) {
-                return $words[$number];
+                return $words[abs($number)];
             }
         
             if ($number < 100) {
@@ -691,6 +698,78 @@
                 $result .= ' ' . $this->convertNumberToWords($remainder);
             }
             return $this->clearData($result);
+        }
+        public function setPK(array $elements,$pks){
+            $i=0;
+            foreach ($elements as $item) {
+                $excess=true;
+                foreach ($pks as $key) {
+                    if(!isset($item[$key])){
+                        $excess=false;
+                        break;
+                    }
+                }
+                foreach ($pks as $value) {
+                    if($excess){
+                        $elements[$i]["_pk_"][$value]=$item[$value];
+                    }else{
+                        $key=str_replace("reference_","",$value);
+                        $elements[$i]["_pk_"][$value]=$item[$key]["reference"];
+                    }
+                }
+                $i++;
+            }
+            return $elements;
+        }
+        public function format_number($number,$point=false){
+            $parse_int="".intval($number);
+            $parse_float="".floatval($number);
+            $returne="";
+            for($i = strlen($parse_int)-1,$j=1; $i >=0; $i--,$j++) {
+                $returne=$parse_int[$i].$returne;
+                if($j%3==0 && strlen($parse_int)>$j) $returne=($point?".":" ").$returne;
+            }
+            // if($parse_float>0) $returne.=",".$parse_float;
+            return $returne;
+        }
+        public function generateCode($table){
+            $alphabet=["A","B","C","D","E","F","G","H","I","J","K","L"];
+            $start=date("Y:m:1 00:00:00");
+            $end=date("Y:m:j 23:59:59");
+            $model=$this->__getModel__($table);
+            if($model){
+                $total=$model::whereBetween("created_at".$this->prefix,[$start,$end])->count();
+                $last=$model::whereBetween("created_at".$this->prefix,[$start,$end])->orderBy("created_at".$this->prefix,"DESC")->first();
+                if(!empty($last)){
+                    $last_code=explode("-",$last["reference".$this->prefix]);
+                    if(count($last_code)>1){
+                        $last_code=intval($last_code[1]);
+                        $total=$last_code;
+                    }
+                }
+                do{
+                    $total=$total+1;
+                    $code=$alphabet[intval(date("m")-1)].substr("0".substr(date("Y"),-2),-3)."-".substr("00".$total,-3);
+                    $count=$model::where("reference".$this->prefix,$code)->count();
+                }while($count!=0);
+                return $code;
+            }else{
+                return false;
+            }
+        }
+        public function insertActivity($action,$reference_element,$user="",$table=""){
+            if($table==="") $table=$this->table;
+            if($user==="") $user="UTS109083DOM";
+            $item=new Activite();
+            $prefix="_activite";
+            $item->{"reference".$prefix}="ACT".$this->generateID();
+            $item->{"reference_utilisateur"}=$user;
+            $item->{"table".$prefix}=strtoupper($table);
+            $item->{"action".$prefix}=$action;
+            $item->{"element".$prefix}=$reference_element;
+            // $item->{"created_at".$prefix}=date("Y-m-d H:i:s");
+            // $item->{"updated_at".$prefix}=date("Y-m-d H:i:s");
+            $item->save();
         }
     }
 

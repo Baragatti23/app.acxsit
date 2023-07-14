@@ -18,13 +18,14 @@
         // METHODS =================================
         public function get($id=null){
             $id=$id?["reference".$this->prefix,$id]:[];
-            $params=$this->validateParams(new Formation(),$id);
+            $params=$this->validateParams();
             if(isset($params["status"]) && $params["status"]=400){
                 return $params;
             }
             $data=$this->executeQuery(new Formation(),$params,$id);
             if($data["status"]==200 && isset($data["data"])){
                 $data["total"]=Formation::count();
+                $data["data"]=$this->setPK(json_decode(json_encode($data["data"]),true),["reference"]);
             }
             return $data;
         }
@@ -33,14 +34,15 @@
             $data = json_decode($request->getContent(),true);
             $element=new Formation();
             $element->{"reference".$this->prefix}=strtoupper(substr($this->table,0,3)).$this->generateID();
-            if(isset($data["libelle"],$data["domaine"],$data["duration"],$data["amount"])){
+            if(isset($data["libelle"],$data["domaine"],$data["duree"],$data["cout"])){
                 $element->{"libelle".$this->prefix}=$data["libelle"];
                 $element->{"domaine".$this->prefix}=$data["domaine"];
-                $element->{"duree".$this->prefix}=$data["duration"];
-                $element->{"cout".$this->prefix}=$data["amount"];
-                $element->{"reference_utilisateur"}="UTI0001";
+                $element->{"duree".$this->prefix}=$data["duree"];
+                $element->{"cout".$this->prefix}=$data["cout"];
+                $element->{"reference_utilisateur"}="UTS109083DOM";
                 $element->{"created_at".$this->prefix}=date("Y-m-d H:i:s");
                 $element->{"updated_at".$this->prefix}=date("Y-m-d H:i:s");
+                $this->insertActivity("CREATE",$element->{"reference".$this->prefix});
                 $element->save();
                 return[
                     "status"=>200,
@@ -57,6 +59,7 @@
         public function del($id){
             $deleted=Formation::where("reference".$this->prefix,$id)->delete();
             if($deleted){
+                $this->insertActivity("DELETE",$id);
                 return[
                     "status"=>200,
                     "id"=>$id,
@@ -84,16 +87,17 @@
                         Formation::where("reference".$this->prefix,$id)->update(["domaine".$this->prefix=>$data["domaine"]]);
                         $success=true;
                     }
-                    if(isset($data["amount"])){
-                        Formation::where("reference".$this->prefix,$id)->update(["cout".$this->prefix=>$data["amount"]]);
+                    if(isset($data["cout"])){
+                        Formation::where("reference".$this->prefix,$id)->update(["cout".$this->prefix=>$data["cout"]]);
                         $success=true;
                     }
-                    if(isset($data["duration"])){
-                        Formation::where("reference".$this->prefix,$id)->update(["duree".$this->prefix=>$data["duration"]]);
+                    if(isset($data["duree"])){
+                        Formation::where("reference".$this->prefix,$id)->update(["duree".$this->prefix=>$data["duree"]]);
                         $success=true;
                     }
                     if($success){
                         Formation::where("reference".$this->prefix,$id)->update(["updated_at".$this->prefix=>date("Y-m-d H:i:s")]);
+                        $this->insertActivity("UPDATE",$id);
                         return[
                             "status"=>200,
                             "id"=>$id,

@@ -7,8 +7,8 @@ class CreateProfilsTable extends Migration{
         Schema::create('profils', function (Blueprint $table) {
             $table->String('reference_profil',15)->primary();
             $table->String('libelle_profil',60);
-            $table->dateTime("created_at_profil")->default(date("Y-m-d H:i:s"));
-            $table->dateTime("updated_at_profil")->default(date("Y-m-d H:i:s"));
+            $table->dateTime("created_at_profil");
+            $table->dateTime("updated_at_profil");
         });
     }
     public function down(){

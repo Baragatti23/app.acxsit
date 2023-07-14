@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Traits\Setting;
+use App\Models\Connexion;
 use App\Models\Profil;
 use App\Models\Statu;
 use Illuminate\Http\Request;
@@ -74,6 +75,21 @@ class AuthController extends Controller
         $user=User::where('email',$request['email'])->firstOrFail();
         $token=$user->createToken('auth_token')->plainTextToken;
         $utilisateur=$this->getUtilisateur($request["email"]);
+        $prefix="_connexion";
+        $utilisateur=Utilisateur::where("email_utilisateur",$request["email"])->first();
+        Connexion::create([
+            'reference'.$prefix=>"CON".$this->generateID(),
+            'reference_utilisateur'=>$utilisateur->reference_utilisateur,
+            'ip'.$prefix=>"",
+            'etat'.$prefix=>"OPEN",
+            'browser'.$prefix=>"Chrome",
+            'os'.$prefix=>"Windows",
+            'user_agent'.$prefix=>"",
+            'date_closed'.$prefix=>null,
+            'created_at'.$prefix=>date("Y-m-d H:i:s"),
+            'updated_at'.$prefix=>date("Y-m-d H:i:s"),
+            'token'.$prefix=>$token,
+        ]);
         return response()->json([
             'status'=>200,
             'data'=>$utilisateur,
@@ -98,11 +114,11 @@ class AuthController extends Controller
     }
     public function getUtilisateur($email){
         $utilisateur=Utilisateur::where('email_utilisateur',$email)->firstOrFail();
-        $utilisateur=$this->clean([json_decode(json_encode($utilisateur),true)],"_utilisateur",false)[0];
+        $utilisateur=$this->cleanPrefix([json_decode(json_encode($utilisateur),true)],"_utilisateur")[0];
         $profil=Profil::where('reference_profil',$utilisateur['reference_profil'])->first();
-        $utilisateur["profil"]=$this->clean([json_decode(json_encode($profil),true)],"_profil")[0];
+        $utilisateur["profil"]=$this->cleanPrefix([json_decode(json_encode($profil),true)],"_profil")[0];
         $statu=Statu::where('reference_statu',$utilisateur['reference_statu'])->first();
-        $utilisateur["statu"]=$this->clean([json_decode(json_encode($statu),true)],"_statu")[0];
+        $utilisateur["statu"]=$this->cleanPrefix([json_decode(json_encode($statu),true)],"_statu")[0];
         unset($utilisateur["reference_profil"],$utilisateur["reference_statu"]);
         return $utilisateur;
     }

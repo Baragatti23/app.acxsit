@@ -23,13 +23,14 @@ use App\Models\Licence;
         // METHODS =================================
         public function get($id=null){
             $id=$id?["reference".$this->prefix,$id]:[];
-            $params=$this->validateParams(new Bordereau(),$id);
+            $params=$this->validateParams();
             if(isset($params["status"]) && $params["status"]=400){
                 return $params;
             }
             $data=$this->executeQuery(new Bordereau(),$params,$id);
             if($data["status"]==200 && isset($data["data"])){
                 $data["data"]=$this->setCountLivrers(json_decode(json_encode($data["data"]),true));
+                $data["data"]=$this->setPK(json_decode(json_encode($data["data"]),true),["reference"]);
                 if($params["betweenStartValue"]){
                     $data=[...$data,...[
                         "total"=>Bordereau::whereBetween("created_at".$this->prefix,[$params["betweenStartValue"],$params["betweenEndValue"]])
@@ -115,6 +116,7 @@ use App\Models\Licence;
                     }
                     if($success){
                         Bordereau::where("reference_bordereau",$id)->update(["updated_at".$this->prefix=>date("Y-m-d H:i:s")]);
+                        $this->insertActivity("UPDATE",$id);
                         return[
                             "status"=>200,
                             "id"=>$id,
@@ -130,35 +132,19 @@ use App\Models\Licence;
         }
         public function post(Request $request){
             $data = json_decode($request->getContent(),true);
-            $alphabet=["A","B","C","D","E","F","G","H","I","J","K","L"];
-            $start=date("Y:m:1 00:00:00");
-            $end=date("Y:m:j 23:59:59");
-            $total=Bordereau::whereBetween("created_at".$this->prefix,[$start,$end])->count();
-            $last=Bordereau::whereBetween("created_at".$this->prefix,[$start,$end])->orderBy("created_at".$this->prefix,"DESC")->first();
-            if(!empty($last)){
-                $last_code=explode("-",$last["reference".$this->prefix]);
-                if(count($last_code)>1){
-                    $last_code=intval($last_code[1]);
-                    $total=$last_code;
-                }
-            }
-            do{
-                $total=$total+1;
-                $code=$alphabet[intval(date("m")-1)].substr("0".substr(date("Y"),-2),-3)."-".substr("00".$total,-3);
-                $count=Proforma::where("reference_proforma",$code)->count();
-            }while($count!=0);
             $element=new Bordereau();
-            $element->{"reference".$this->prefix}=strtoupper(substr($this->table,0,3)).$this->generateID();
-            if(isset($data["proforma"])){
-                $element->{"reference_proforma"}=$data["proforma"];
+            $element->{"reference".$this->prefix}="BL-".$this->generateCode("bordereaus");
+            if(isset($data["reference_proforma"])){
+                $element->{"reference_proforma"}=$data["reference_proforma"];
                 if(isset($data["nom_livreur"])) $element->{"nom_livreur".$this->prefix}=$data["nom_livreur"];
                 if(isset($data["contact_livreur"])) $element->{"contact_livreur".$this->prefix}=$data["contact_livreur"];
                 if(isset($data["nom_recepteur"])) $element->{"nom_recepteur".$this->prefix}=$data["nom_recepteur"] ?? "";
                 if(isset($data["contact_recepteur"])) $element->{"contact_recepteur".$this->prefix}=$data["contact_recepteur"] ?? "";
                 $element->{"reference_estado"}="EST0001";
-                $element->{"reference_utilisateur"}="UTI0001";
+                $element->{"reference_utilisateur"}="UTS109083DOM";
                 $element->{"created_at".$this->prefix}=date("Y-m-d H:i:s");
                 $element->{"updated_at".$this->prefix}=date("Y-m-d H:i:s");
+                $this->insertActivity("CREATE",$element->{"reference".$this->prefix});
                 $element->save();
                 if($element){
                     return[
@@ -179,10 +165,11 @@ use App\Models\Licence;
             $livrer=false;
             if($count>0){
                 $livrers=Livrer::where("reference_bordereau",$id)->delete();
-                $licences=Licence::where("reference_bordereau",$id)->delete();
+                // $licences=Licence::where("reference_bordereau",$id)->delete();
                 $bordereau=Bordereau::where("reference_bordereau",$id)->delete();
             }
             if($bordereau){
+                $this->insertActivity("DELETE",$id);
                 return[
                     "status"=>200,
                     "id"=>$id,
@@ -231,5 +218,6 @@ use App\Models\Licence;
             }
             return $bordereaux;
         }
+        
     }
 ?>

@@ -24,6 +24,7 @@
             }
             $data=$this->executeQuery(new Livrer(),$params,$id);
             if($data["status"]==200 && isset($data["data"])){
+                $data["data"]=$this->setPK(json_decode(json_encode($data["data"]),true),["bordereau","equipement"]);
                 
             }
             return $data;
@@ -37,9 +38,10 @@
                 $element->{"reference_bordereau"}=$data["bordereau"];
                 $element->{"reference_equipement"}=$data["equipement"];
                 $element->{"unities".$this->prefix}=$data["unities"];
-                $element->{"reference_utilisateur"}="UTI0001";
+                $element->{"reference_utilisateur"}="UTS109083DOM";
                 $element->{"created_at".$this->prefix}=date("Y-m-d H:i:s");
                 $element->{"updated_at".$this->prefix}=date("Y-m-d H:i:s");
+                $this->insertActivity("CREATE",$element->{"reference".$this->prefix});
                 $element->save();
                 return[
                     "status"=>200,
